@@ -99,6 +99,8 @@ html, body {
 .cm-s-turtle-light .CodeMirror-activeline-background { background: #edeae4; }
 .cm-s-turtle-light .CodeMirror-scrollbar-filler,
 .cm-s-turtle-light .CodeMirror-gutter-filler { background: #f0ede7; }
+/* Text selected in the graph */
+.cm-s-turtle-light .graph-sel { background: rgba(217,119,6,.18); border-radius: 2px; }
 /* Token colors */
 .cm-s-turtle-light .cm-comment    { color: #b8b3ae; font-style: italic; }
 .cm-s-turtle-light .cm-keyword    { color: #7c3aed; font-weight: 700; }
@@ -330,8 +332,9 @@ const TOK_RE = new RegExp([
 function parseTurtle(src) {
   const toks = [];
   let m; TOK_RE.lastIndex = 0;
+  // Tokens keep their source offsets so triples can be mapped back to editor text.
   while ((m = TOK_RE.exec(src)) !== null)
-    if (!m[0].startsWith('#')) toks.push(m[0]);
+    if (!m[0].startsWith('#')) toks.push({ s:m[0], start:m.index, end:m.index + m[0].length });
 
   const pfx = {}, triples = [];
   let i = 0;
@@ -342,57 +345,64 @@ function parseTurtle(src) {
     return (ns in pfx) ? pfx[ns] + loc : pn;
   }
 
+  // Returns a term plus the source range [start, end) it was read from.
   function term() {
-    const t = toks[i];
-    if (!t) throw new Error('Unexpected end of input.');
-    if (t.startsWith('<'))              { i++; return { type:'iri', value:t.slice(1,-1) }; }
-    if (t === 'a')                      { i++; return { type:'iri', value:RDF_TYPE }; }
-    if (t === 'true' || t === 'false')  { i++; return { type:'literal', value:t, datatype:XSD+'boolean' }; }
+    const tk = toks[i];
+    if (!tk) throw new Error('Unexpected end of input.');
+    const t = tk.s, start = tk.start;
+    const done = (o) => { i++; return { ...o, start, end: toks[i-1].end }; };
+    if (t.startsWith('<'))              return done({ type:'iri', value:t.slice(1,-1) });
+    if (t === 'a')                      return done({ type:'iri', value:RDF_TYPE });
+    if (t === 'true' || t === 'false')  return done({ type:'literal', value:t, datatype:XSD+'boolean' });
     if (t.startsWith('"')) {
       i++;
       const q = t.startsWith('"""') ? 3 : 1;
       let val = t.slice(q, t.length - q).replace(/\\(.)/g, (_,c) =>
         ({n:'\n',t:'\t',r:'\r','"':'"','\\':'\\'}[c]||c));
       let lang = null, dt = null;
-      const nx = toks[i];
+      const nx = toks[i]?.s;
       if (nx && nx.startsWith('@'))   { lang = nx.slice(1); i++; }
       else if (nx && nx.startsWith('^^')) {
         const raw = nx.slice(2);
         dt = raw.startsWith('<') ? raw.slice(1,-1) : resolve(raw);
         i++;
       }
-      return { type:'literal', value:val, lang, datatype:dt };
+      return { type:'literal', value:val, lang, datatype:dt, start, end: toks[i-1].end };
     }
-    if (/^-?\d+\.\d+$/.test(t)) { i++; return { type:'literal', value:t, datatype:XSD+'decimal' }; }
-    if (/^-?\d+$/.test(t))      { i++; return { type:'literal', value:t, datatype:XSD+'integer' }; }
-    if (t.includes(':'))        { i++; return { type:'iri', value:resolve(t) }; }
+    if (/^-?\d+\.\d+$/.test(t)) return done({ type:'literal', value:t, datatype:XSD+'decimal' });
+    if (/^-?\d+$/.test(t))      return done({ type:'literal', value:t, datatype:XSD+'integer' });
+    if (t.includes(':'))        return done({ type:'iri', value:resolve(t) });
     throw new Error(`Unexpected token "${t}".`);
   }
 
   while (i < toks.length) {
-    const t0 = toks[i];
+    const t0 = toks[i].s;
     if (t0 === '@prefix' || t0 === 'prefix') {
       i++;
-      const label = toks[i]; i++;
-      const iri   = toks[i]; i++;
+      const label = toks[i].s; i++;
+      const iri   = toks[i].s; i++;
       pfx[label.slice(0,-1)] = iri.slice(1,-1);
-      if (toks[i] === '.') i++;
+      if (toks[i]?.s === '.') i++;
       continue;
     }
-    if (t0 === '@base' || t0 === 'base') { i++; i++; if (toks[i]==='.') i++; continue; }
+    if (t0 === '@base' || t0 === 'base') { i++; i++; if (toks[i]?.s==='.') i++; continue; }
 
     const subj = term();
+    const first = triples.length;
     loop: while (true) {
       const pred = term();
       let obj = term();
       triples.push({ subj, pred, obj });
-      while (toks[i] === ',') { i++; obj = term(); triples.push({ subj, pred, obj }); }
-      switch (toks[i]) {
-        case ';': i++; if (toks[i] === '.') { i++; break loop; } break;
+      while (toks[i]?.s === ',') { i++; obj = term(); triples.push({ subj, pred, obj }); }
+      switch (toks[i]?.s) {
+        case ';': i++; if (toks[i]?.s === '.') { i++; break loop; } break;
         case '.': i++; break loop;
         default:  break loop;
       }
     }
+    // Every triple knows the whole statement it came from, for graph -> editor marking.
+    const stmt = [subj.start, toks[i-1].end];
+    for (let k = first; k < triples.length; k++) triples[k].stmt = stmt;
   }
   return triples;
 }
@@ -406,47 +416,60 @@ function localName(iri) {
 }
 
 function buildGraph(triples) {
-  const nodes = new Map(), edges = [];
+  const nodes = new Map(), edges = [], hits = [];
 
+  // stmts:    statement ranges that define a node (marked when the node is selected in the graph)
+  // mentions: ranges where it only appears as an object (fallback for undefined nodes)
   function node(iri) {
     if (!nodes.has(iri))
-      nodes.set(iri, { id:iri, label:localName(iri), kind:'resource', group:null, attrs:{}, comment:null });
+      nodes.set(iri, { id:iri, label:localName(iri), kind:'resource', group:null, attrs:{}, comment:null, stmts:[], mentions:[] });
     return nodes.get(iri);
   }
 
-  for (const { subj, pred, obj } of triples) {
+  // hits map editor text ranges to the graph elements they produce (editor -> graph).
+  for (const { subj, pred, obj, stmt } of triples) {
     if (subj.type !== 'iri') continue;
     const s = node(subj.value);
     const p = pred.value;
+    const tripleSpan = [pred.start, obj.end];
+
+    hits.push({ span:[subj.start, subj.end], nodes:[s.id], edges:[] });
+    if (!s.stmts.some(x => x[0] === stmt[0])) s.stmts.push(stmt);
 
     if (obj.type === 'literal') {
       if (p === RDFS+'label')        s.label = obj.value;
       else if (p === RDFS+'comment') s.comment = obj.value;
       else                           s.attrs[localName(p)] = obj.value;
+      hits.push({ span:tripleSpan, nodes:[s.id], edges:[] });
       continue;
     }
 
+    if (p === RDF_TYPE && SCHEMA_TYPES.has(obj.value)) {
+      s.kind = localName(obj.value);
+      hits.push({ span:tripleSpan, nodes:[s.id], edges:[] });
+      continue;
+    }
+
+    const o = node(obj.value);
+    o.mentions.push([obj.start, obj.end]);
+
+    let e;
     if (p === RDF_TYPE) {
-      if (SCHEMA_TYPES.has(obj.value)) {
-        s.kind = localName(obj.value);
-      } else {
-        node(obj.value);
-        if (!s.group) s.group = localName(obj.value);
-        edges.push({ from:s.id, to:obj.value, label:'a', kind:'type' });
-      }
-      continue;
-    }
-
-    node(obj.value);
-    if (p === RDFS+'domain') {
-      edges.push({ from:obj.value, to:s.id, label:'domain', kind:'schema' });
+      if (!s.group) s.group = localName(obj.value);
+      e = { from:s.id, to:obj.value, label:'a', kind:'type' };
+    } else if (p === RDFS+'domain') {
+      e = { from:obj.value, to:s.id, label:'domain', kind:'schema' };
     } else {
       const sk = (p===RDFS+'range'||p===RDFS+'subClassOf') ? 'schema' : 'data';
-      edges.push({ from:s.id, to:obj.value, label:localName(p), kind:sk });
+      e = { from:s.id, to:obj.value, label:localName(p), kind:sk };
     }
+    e.id = edges.length;
+    e.marks = [[subj.start, subj.end], tripleSpan];
+    edges.push(e);
+    hits.push({ span:tripleSpan, nodes:[e.from, e.to], edges:[e.id] });
   }
 
-  return { nodes:[...nodes.values()], edges };
+  return { nodes:[...nodes.values()], edges, hits };
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -498,6 +521,10 @@ const EDGE_COLOR = {
 const isSchema = k => ['Class','ObjectProperty','DatatypeProperty','Ontology'].includes(k);
 
 let network    = null;
+let nodesDS    = null;
+let edgesDS    = null;
+let nodeById   = new Map();
+let edgeById   = new Map();
 let curGraph   = null;
 let showSchema = true;
 let showData   = true;
@@ -519,8 +546,8 @@ function render(graph) {
     return { id:n.id, label:n.label, title:tip, ...s, ...pin };
   });
 
-  const edgeItems = vEdges.map((e,i) => ({
-    id:i, from:e.from, to:e.to, label:e.label,
+  const edgeItems = vEdges.map(e => ({
+    id:e.id, from:e.from, to:e.to, label:e.label,
     dashes: e.kind === 'schema' || e.kind === 'type',
     arrows:{ to:{ enabled:true, scaleFactor:.65 } },
     color: EDGE_COLOR[e.kind] || EDGE_COLOR.data,
@@ -538,15 +565,20 @@ function render(graph) {
     layout: treeLayout
       ? { hierarchical:{ direction:'UD', sortMethod:'hubsize', levelSeparation:110, nodeSpacing:140 } }
       : { randomSeed:42 },
-    interaction:{ hover:true, tooltipDelay:200 },
+    // Selecting a node must not also select its edges: the editor marks every selected edge.
+    interaction:{ hover:true, tooltipDelay:200, selectConnectedEdges:false },
   };
 
   if (network) { network.destroy(); network = null; }
-  network = new vis.Network(
-    document.getElementById('network'),
-    { nodes: new vis.DataSet(nodeItems), edges: new vis.DataSet(edgeItems) },
-    opts
-  );
+  nodesDS  = new vis.DataSet(nodeItems);
+  edgesDS  = new vis.DataSet(edgeItems);
+  nodeById = new Map(graph.nodes.map(n => [n.id, n]));
+  edgeById = new Map(graph.edges.map(e => [e.id, e]));
+  network  = new vis.Network(document.getElementById('network'), { nodes: nodesDS, edges: edgesDS }, opts);
+  network.on('select', onGraphSelect);
+
+  clearTextMarks();
+  onEditorSelect();
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -562,6 +594,7 @@ function scheduleRender(text) {
     try {
       const triples = parseTurtle(text);
       curGraph = buildGraph(triples);
+      parsedText = text;
       render(curGraph);
 
       document.getElementById('tc').style.display = '';
@@ -584,6 +617,79 @@ function scheduleRender(text) {
 function setStatus(s) {
   document.getElementById('sd').className = 'sd' + (s==='err'?' err':s==='busy'?' busy':'');
   document.getElementById('st').textContent = s==='ok'?'Valid' : s==='err'?'Parse error':'Parsing…';
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// 5b. Two-way selection sync
+//   editor selection -> graph: matching nodes/edges emphasised, rest dimmed
+//   graph selection  -> editor: matching source text tinted via markText
+// Offsets are only valid for the text that was parsed, so both directions
+// bail out when the editor has changed since the last successful parse.
+// ═══════════════════════════════════════════════════════════════════
+let parsedText = null;
+let textMarks  = [];
+let rafSel     = 0;
+
+const HI_EDGE = { color:'#1c1917', highlight:'#1c1917', hover:'#1c1917', opacity:1 };
+const edgeColor = (kind, opacity = 1) => ({ ...EDGE_COLOR[kind], opacity });
+
+function setGraphHighlight(nodeIds, edgeIds) {   // nodeIds === null clears
+  if (!nodesDS) return;
+  const on = nodeIds !== null;
+  nodesDS.update(nodesDS.getIds().map(id => {
+    const hit = on && nodeIds.has(id);
+    return { id, opacity: on && !hit ? .18 : 1, borderWidth: hit ? 3 : 1.5 };
+  }));
+  edgesDS.update(edgesDS.getIds().map(id => {
+    const hit = on && edgeIds.has(id), kind = edgeById.get(id).kind;
+    return { id, width: hit ? 2.5 : 1, color: hit ? HI_EDGE : edgeColor(kind, on ? .2 : 1) };
+  }));
+}
+
+function clearTextMarks() {
+  textMarks.forEach(m => m.clear());
+  textMarks = [];
+}
+
+function onEditorSelect() {
+  cancelAnimationFrame(rafSel);
+  rafSel = requestAnimationFrame(() => {
+    const cm = window._cm;
+    if (!cm || !curGraph || !nodesDS) return;
+    clearTextMarks();
+    const ranges = cm.listSelections().filter(r => !r.empty())
+      .map(r => [cm.indexFromPos(r.from()), cm.indexFromPos(r.to())]);
+    if (!ranges.length || cm.getValue() !== parsedText) return setGraphHighlight(null);
+
+    const nodeIds = new Set(), edgeIds = new Set();
+    for (const h of curGraph.hits) {
+      if (!ranges.some(([a, b]) => h.span[0] < b && h.span[1] > a)) continue;
+      h.nodes.forEach(id => nodesDS.get(id) && nodeIds.add(id));   // skip ids hidden by the filters
+      h.edges.forEach(id => edgesDS.get(id) && edgeIds.add(id));
+    }
+    if (!nodeIds.size && !edgeIds.size) return setGraphHighlight(null);
+    network.unselectAll();
+    setGraphHighlight(nodeIds, edgeIds);
+  });
+}
+
+function onGraphSelect() {
+  const cm = window._cm;
+  clearTextMarks();
+  setGraphHighlight(null);
+  if (cm.getValue() !== parsedText) return;
+
+  const spans = [];
+  for (const id of network.getSelectedNodes()) {
+    const n = nodeById.get(id);
+    spans.push(...(n.stmts.length ? n.stmts : n.mentions));
+  }
+  for (const id of network.getSelectedEdges()) spans.push(...edgeById.get(id).marks);
+  if (!spans.length) return;
+
+  for (const [a, b] of spans)
+    textMarks.push(cm.markText(cm.posFromIndex(a), cm.posFromIndex(b), { className: 'graph-sel' }));
+  cm.scrollIntoView({ from: cm.posFromIndex(spans[0][0]), to: cm.posFromIndex(spans[0][1]) }, 60);
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -731,6 +837,7 @@ window._cm = CodeMirror(document.getElementById('cm-wrap'), {
 });
 
 window._cm.on('change', () => scheduleRender(window._cm.getValue()));
+window._cm.on('cursorActivity', onEditorSelect);
 scheduleRender(STARTER);
 </script>
 </body>
