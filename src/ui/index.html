@@ -1,67 +1,550 @@
 <!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Ontology assistant</title>
-    <style>
-      body {
-        max-width: 48rem;
-        margin: 3rem auto;
-        padding: 0 1rem;
-        font: 1rem/1.5 system-ui, sans-serif;
-      }
-      textarea {
-        box-sizing: border-box;
-        width: 100%;
-        min-height: 7rem;
-        margin: 0.5rem 0;
-        padding: 0.75rem;
-        font: inherit;
-      }
-      button { padding: 0.5rem 1rem; font: inherit; }
-      #answer { white-space: pre-wrap; }
-    </style>
-  </head>
-  <body>
-    <h1>Ontology assistant</h1>
-    <form id="question-form">
-      <label for="question">Ask a question about the ontology</label>
-      <textarea id="question" required></textarea>
-      <button type="submit">Ask</button>
-    </form>
-    <p id="status" role="status"></p>
-    <section aria-live="polite">
-      <h2>Answer</h2>
-      <p id="answer"></p>
-    </section>
-    <script>
-      const form = document.querySelector("#question-form");
-      const questionInput = document.querySelector("#question");
-      const status = document.querySelector("#status");
-      const answer = document.querySelector("#answer");
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Tinkerers Medellín</title>
+<script src="https://unpkg.com/vis-network@9.1.9/dist/vis-network.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:         #f7f5f1;
+  --surface:    #ffffff;
+  --surface2:   #f0ede7;
+  --border:     #e5e0d8;
+  --text:       #1c1917;
+  --muted:      #78716c;
+  --muted2:     #a8a29e;
+  --accent:     #44403c;
+  --accent-dim: rgba(68,64,60,.07);
+  --accent-lt:  #78716c;
+  --green:      #15803d;
+  --amber:      #b45309;
+  --red:        #b91c1c;
+}
+html, body { height: 100%; background: var(--bg); color: var(--text); font-family: -apple-system,'Segoe UI',system-ui,sans-serif; font-size: 14px; }
+#app { display: flex; flex-direction: column; height: 100vh; }
 
-      form.addEventListener("submit", async (event) => {
-        event.preventDefault();
-        status.textContent = "Asking...";
-        answer.textContent = "";
+/* ── Header ── */
+header {
+  height: 48px; background: var(--surface); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 20px; gap: 14px; flex-shrink: 0;
+}
+.wordmark {
+  font-size: 17px; font-weight: 700; letter-spacing: -0.03em; color: var(--text);
+  user-select: none;
+}
+.wordmark-sub {
+  font-size: 10px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--muted2); padding-left: 2px;
+}
+.header-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.status-pill { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted2); }
+.sdot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
+.sdot.thinking { background: var(--amber); animation: pulse .9s ease-in-out infinite; }
+@keyframes pulse { 0%,100%{opacity:1}50%{opacity:.2} }
+.btn-sm { height: 28px; padding: 0 10px; border-radius: 5px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 11px; cursor: pointer; transition: all .12s; }
+.btn-sm:hover { border-color: var(--red); color: var(--red); }
 
-        try {
-          const response = await fetch("/api/ask", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ question: questionInput.value })
-          });
-          const result = await response.json();
-          if (!response.ok) {
-            throw new Error(result.error || `Request failed (${response.status})`);
-          }
-          answer.textContent = result.answer;
-          status.textContent = "";
-        } catch (error) {
-          status.textContent = error.message;
-        }
-      });
-    </script>
-  </body>
+/* ── Workspace split ── */
+#workspace { display: flex; flex: 1; overflow: hidden; }
+
+/* ── Chat panel ── */
+#chat-panel { flex: 0 0 54%; display: flex; flex-direction: column; border-right: 1px solid var(--border); min-width: 0; background: var(--bg); }
+#messages { flex: 1; overflow-y: auto; padding: 20px 0; scrollbar-width: thin; scrollbar-color: #e5e0d8 transparent; }
+#messages::-webkit-scrollbar { width: 5px; }
+#messages::-webkit-scrollbar-thumb { background: #e5e0d8; border-radius: 3px; }
+
+/* ── Graph panel ── */
+#graph-panel { flex: 1; display: flex; flex-direction: column; background: var(--bg); min-width: 0; overflow: hidden; }
+.panel-bar {
+  height: 34px; background: var(--surface); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 14px; gap: 8px; flex-shrink: 0;
+  font-size: 10px; font-weight: 600; letter-spacing: .6px; text-transform: uppercase; color: var(--muted);
+}
+#path-badge {
+  margin-left: auto; font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 10px;
+  background: rgba(180,83,9,.10); color: #b45309; border: 1px solid rgba(180,83,9,.25);
+  display: none; letter-spacing: .4px;
+}
+#ont-wrap { flex: 1; position: relative; min-height: 0; overflow: hidden; }
+#ont-network { position: absolute; inset: 0; }
+#ont-msg {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 11px; color: var(--muted2); pointer-events: none;
+}
+
+/* ── Messages ── */
+.msg { display: flex; gap: 10px; padding: 10px 16px; max-width: 100%; }
+.avatar { width: 28px; height: 28px; border-radius: 7px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; margin-top: 2px; }
+.avatar.user { background: #f0ede7; border: 1px solid #e5e0d8; }
+.avatar.asst { background: linear-gradient(135deg,#44403c,#78716c); }
+.bubble { flex: 1; min-width: 0; }
+.role-label { font-size: 10px; font-weight: 700; letter-spacing: .7px; text-transform: uppercase; color: var(--muted2); margin-bottom: 5px; }
+.answer-text { line-height: 1.65; color: var(--text); font-size: 13px; }
+.answer-text p  { margin-bottom: .5em; }
+.answer-text p:last-child { margin-bottom: 0; }
+.answer-text ul, .answer-text ol { padding-left: 1.3em; margin-bottom: .5em; }
+.answer-text li  { margin-bottom: .15em; }
+.answer-text strong { color: #1c1917; font-weight: 600; }
+.answer-text code { font-family: monospace; font-size: .82em; background: #f0ede7; padding: 1px 4px; border-radius: 3px; color: #b45309; }
+
+/* ── Traversal graph (inline in chat) ── */
+.graph-visual { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.gv-entity { display: flex; flex-direction: column; }
+.gv-pill { display: inline-flex; flex-direction: column; align-self: flex-start; padding: 4px 10px; border-radius: 7px; border: 1.5px solid; font-size: 11.5px; font-weight: 700; line-height: 1.3; }
+.gv-pill .gv-id { font-weight: 400; font-size: 9px; font-family: monospace; opacity: .65; }
+.gv-edges { margin-left: 14px; padding-left: 10px; border-left: 1px solid #e5e0d8; display: flex; flex-direction: column; gap: 3px; padding-top: 4px; margin-top: 1px; }
+.gv-edge { display: flex; align-items: center; gap: 5px; font-size: 11px; }
+.gv-prop { font-size: 9px; font-family: monospace; color: #b45309; background: rgba(180,83,9,.07); border: 1px solid rgba(180,83,9,.18); border-radius: 3px; padding: 1px 4px; white-space: nowrap; flex-shrink: 0; }
+.gv-arrow { color: #a8a29e; flex-shrink: 0; }
+.gv-target-pill { padding: 2px 7px; border-radius: 4px; border: 1px solid; font-size: 11px; font-weight: 600; white-space: nowrap; }
+.gv-literal { color: #15803d; font-family: monospace; font-size: 11px; }
+.gv-count { font-size: 10px; color: #a8a29e; }
+
+/* Entity type pill colors — light theme */
+.t-store     { background:#eff6ff; border-color:rgba(59,130,246,.4);  color:#1e40af; }
+.t-item      { background:#f0fdf4; border-color:rgba(22,163,74,.4);   color:#15803d; }
+.t-customer  { background:#fffbeb; border-color:rgba(217,119,6,.4);   color:#92400e; }
+.t-order     { background:#eff6ff; border-color:rgba(37,99,235,.4);   color:#1e3a8a; }
+.t-orderline { background:#faf5ff; border-color:rgba(139,92,246,.4);  color:#6b21a8; }
+.t-division  { background:#fdf2f8; border-color:rgba(219,39,119,.4);  color:#9d174d; }
+.t-zone      { background:#fefce8; border-color:rgba(202,138,4,.4);   color:#713f12; }
+.t-promo     { background:#fff7ed; border-color:rgba(234,88,12,.4);   color:#9a3412; }
+.t-category  { background:#f0fdfa; border-color:rgba(20,184,166,.4);  color:#0f766e; }
+.t-group     { background:#f0fdf4; border-color:rgba(34,197,94,.4);   color:#166534; }
+.t-price     { background:#faf5ff; border-color:rgba(139,92,246,.4);  color:#6b21a8; }
+.t-generic   { background:#f7f5f1; border-color:#e5e0d8;               color:#78716c; }
+
+/* ── Markdown tables ── */
+.md-table-wrap { overflow-x: auto; border-radius: 8px; border: 1px solid var(--border); margin: .7em 0; box-shadow: 0 1px 4px rgba(0,0,0,.04); }
+.md-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.md-table th {
+  background: var(--surface2); padding: 7px 12px; text-align: left;
+  font-size: 10px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase;
+  color: var(--muted); border-bottom: 1px solid var(--border); white-space: nowrap;
+}
+.md-table td { padding: 7px 12px; border-bottom: 1px solid #f0ede7; color: var(--text); vertical-align: top; }
+.md-table tbody tr:last-child td { border-bottom: none; }
+.md-table tbody tr:hover td { background: #faf8f5; }
+
+/* ── Typing ── */
+.typing { display: flex; gap: 4px; align-items: center; padding: 6px 0; }
+.typing span { width: 6px; height: 6px; border-radius: 50%; background: #c4bfba; animation: bounce 1.2s ease-in-out infinite; }
+.typing span:nth-child(2) { animation-delay: .2s; }
+.typing span:nth-child(3) { animation-delay: .4s; }
+@keyframes bounce { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-5px)} }
+
+/* ── Welcome ── */
+#welcome { padding: 28px 18px 0; display: flex; flex-direction: column; gap: 18px; }
+#welcome h2 { font-size: 20px; font-weight: 700; letter-spacing: -.4px; color: var(--text); }
+#welcome p  { color: var(--muted); line-height: 1.6; font-size: 13px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { padding: 6px 12px; border-radius: 7px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 11.5px; cursor: pointer; transition: all .12s; line-height: 1.4; text-align: left; box-shadow: 0 1px 3px rgba(0,0,0,.04); }
+.chip:hover { border-color: var(--accent); background: var(--accent-dim); color: var(--accent); }
+
+/* ── Input ── */
+#input-area { background: var(--surface); border-top: 1px solid var(--border); padding: 12px 16px; flex-shrink: 0; }
+.input-row { display: flex; gap: 8px; align-items: flex-end; }
+#question { flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: 9px; color: var(--text); font: 13px/1.5 -apple-system,'Segoe UI',system-ui,sans-serif; padding: 9px 12px; resize: none; min-height: 40px; max-height: 120px; overflow-y: auto; transition: border-color .12s; outline: none; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
+#question:focus { border-color: var(--accent); }
+#question::placeholder { color: var(--muted2); }
+#send-btn { width: 40px; height: 40px; border-radius: 9px; border: none; flex-shrink: 0; background: #44403c; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background .12s; }
+#send-btn:hover:not(:disabled) { background: #292524; }
+#send-btn:disabled { background: var(--surface2); border: 1px solid var(--border); opacity: .5; cursor: default; }
+.input-hint { text-align: center; font-size: 10px; color: var(--muted2); margin-top: 6px; }
+
+/* ── vis-network tooltip ── */
+.vis-tooltip { background: #ffffff !important; border: 1px solid #e5e0d8 !important; color: #1c1917 !important; border-radius: 6px !important; font: 11px/1.5 monospace !important; padding: 6px 9px !important; box-shadow: 0 4px 16px rgba(0,0,0,.08) !important; white-space: pre-wrap !important; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header>
+    <span class="wordmark">AI Tinkerers Medellín</span>
+    <div class="header-right">
+      <div class="status-pill"><div class="sdot" id="sdot"></div><span id="stext">Listo</span></div>
+      <button class="btn-sm" onclick="clearChat()">Limpiar</button>
+    </div>
+  </header>
+
+  <div id="workspace">
+
+    <!-- Left: chat -->
+    <div id="chat-panel">
+      <div id="messages">
+        <div id="welcome">
+          <div>
+            <h2>Pregunta sobre los datos</h2>
+            <p>El agente consulta el grafo de conocimiento. La ruta que recorre se ilumina en el esquema de la derecha.</p>
+          </div>
+          <div class="chips">
+            <button class="chip" onclick="prefill(this)">¿Qué tiendas hay en Antioquia?</button>
+            <button class="chip" onclick="prefill(this)">¿Qué productos están en promoción?</button>
+            <button class="chip" onclick="prefill(this)">¿Qué compró Valentina y en cuál tienda?</button>
+            <button class="chip" onclick="prefill(this)">¿Cuál es el precio de la Leche Entera en Zona B?</button>
+            <button class="chip" onclick="prefill(this)">¿Qué clientes compraron productos lácteos?</button>
+            <button class="chip" onclick="prefill(this)">¿Cuántos pedidos se hicieron el 2 de octubre?</button>
+            <button class="chip" onclick="prefill(this)">¿Qué tiendas comparten la misma zona de precio?</button>
+            <button class="chip" onclick="prefill(this)">¿Qué tipos de promoción hay y cómo funcionan?</button>
+          </div>
+        </div>
+      </div>
+      <div id="input-area">
+        <div class="input-row">
+          <textarea id="question" placeholder="Pregunta sobre tiendas, productos, precios, pedidos…" rows="1"></textarea>
+          <button id="send-btn" onclick="sendMessage()">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          </button>
+        </div>
+        <p class="input-hint">Enter para enviar · Shift+Enter nueva línea</p>
+      </div>
+    </div>
+
+    <!-- Right: ontology graph -->
+    <div id="graph-panel">
+      <div class="panel-bar">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="5" height="5" rx="1"/><rect x="16" y="3" width="5" height="5" rx="1"/><rect x="3" y="16" width="5" height="5" rx="1"/><line x1="8" y1="5" x2="16" y2="5"/><line x1="8" y1="18" x2="16" y2="18"/></svg>
+        Esquema de la ontología
+        <span id="path-badge">Ruta activa</span>
+      </div>
+      <div id="ont-wrap">
+        <div id="ont-network"></div>
+        <div id="ont-msg">Cargando esquema…</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ═══════════════════════════════════════════════════════════════════
+// Turtle parser (minimal — same as live-editor)
+// ═══════════════════════════════════════════════════════════════════
+const RDF_TYPE = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type';
+const RDFS     = 'http://www.w3.org/2000/01/rdf-schema#';
+const OWL      = 'http://www.w3.org/2002/07/owl#';
+const XSD      = 'http://www.w3.org/2001/XMLSchema#';
+const SCHEMA_TYPES = new Set([OWL+'Class',OWL+'ObjectProperty',OWL+'DatatypeProperty',OWL+'Ontology']);
+
+const TOK_RE = new RegExp([
+  '#[^\\n]*','"""(?:[^\\\\]|\\\\.)*?"""','"(?:[^"\\\\]|\\\\.)*"','<[^>]*>',
+  '\\^\\^[\\w-]+:[\\w.-]+','\\^\\^<[^>]*>','@[a-zA-Z][a-zA-Z-]*',
+  '[\\w-]*:[\\w.-]+','[\\w-]*:','[.,;]','-?\\d+\\.\\d+','-?\\d+','[A-Za-z_][\\w-]*',
+].join('|'),'g');
+
+function parseTurtle(src) {
+  const toks=[];let m;TOK_RE.lastIndex=0;
+  while((m=TOK_RE.exec(src))!==null)if(!m[0].startsWith('#'))toks.push(m[0]);
+  const pfx={},triples=[];let i=0;
+  function resolve(pn){const k=pn.indexOf(':');const ns=pn.slice(0,k),loc=pn.slice(k+1);return(ns in pfx)?pfx[ns]+loc:pn;}
+  function term(){const t=toks[i];if(!t)throw new Error('Unexpected end');
+    if(t.startsWith('<')){i++;return{type:'iri',value:t.slice(1,-1)};}
+    if(t==='a'){i++;return{type:'iri',value:RDF_TYPE};}
+    if(t.startsWith('"')){i++;const q=t.startsWith('"""')?3:1;
+      let val=t.slice(q,t.length-q).replace(/\\(.)/g,(_,c)=>({n:'\n',t:'\t',r:'\r','"':'"','\\':'\\'}[c]||c));
+      const nx=toks[i];let lang=null,dt=null;
+      if(nx&&nx.startsWith('@')){lang=nx.slice(1);i++;}
+      else if(nx&&nx.startsWith('^^')){const raw=nx.slice(2);dt=raw.startsWith('<')?raw.slice(1,-1):resolve(raw);i++;}
+      return{type:'literal',value:val,lang,datatype:dt};}
+    if(/^-?\d+\.\d+$/.test(t)){i++;return{type:'literal',value:t,datatype:XSD+'decimal'};}
+    if(/^-?\d+$/.test(t)){i++;return{type:'literal',value:t,datatype:XSD+'integer'};}
+    if(t.includes(':')){i++;return{type:'iri',value:resolve(t)};}
+    throw new Error(`Unexpected token "${t}"`);
+  }
+  while(i<toks.length){const t0=toks[i];
+    if(t0==='@prefix'||t0==='prefix'){i++;const label=toks[i];i++;const iri=toks[i];i++;pfx[label.slice(0,-1)]=iri.slice(1,-1);if(toks[i]==='.')i++;continue;}
+    if(t0==='@base'||t0==='base'){i++;i++;if(toks[i]==='.')i++;continue;}
+    const subj=term();
+    loop:while(true){const pred=term();let obj=term();triples.push({subj,pred,obj});
+      while(toks[i]===','){i++;obj=term();triples.push({subj,pred,obj});}
+      switch(toks[i]){case';':i++;if(toks[i]==='.')  {i++;break loop;}break;case'.':i++;break loop;default:break loop;}}
+  }
+  return triples;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Build vis-network graph data from ontology triples
+// ═══════════════════════════════════════════════════════════════════
+function localName(iri){const m=/[#\/]([^#\/]+)$/.exec(iri);return m?m[1]:iri;}
+
+const KIND_BASE = {
+  Class:            { shape:'box',     color:{background:'#eff6ff',border:'#3b82f6',highlight:{background:'#dbeafe',border:'#2563eb'}}, font:{color:'#1e40af',size:12,face:'monospace'}, borderWidth:1.5, margin:7, shadow:{enabled:true,color:'rgba(59,130,246,.1)',size:6,x:0,y:2} },
+  ObjectProperty:   { shape:'diamond', color:{background:'#fffbeb',border:'#d97706',highlight:{background:'#fef3c7',border:'#b45309'}}, font:{color:'#92400e',size:10,face:'monospace'}, borderWidth:1.5, size:15, shadow:{enabled:true,color:'rgba(217,119,6,.1)',size:5,x:0,y:2} },
+  DatatypeProperty: { shape:'diamond', color:{background:'#f0fdf4',border:'#16a34a',highlight:{background:'#dcfce7',border:'#15803d'}}, font:{color:'#15803d',size:10,face:'monospace'}, borderWidth:1.5, size:13, shadow:{enabled:true,color:'rgba(22,163,74,.1)',size:5,x:0,y:2} },
+  Ontology:         { shape:'hexagon', color:{background:'#fdf4ff',border:'#a855f7',highlight:{background:'#fae8ff',border:'#7e22ce'}}, font:{color:'#7e22ce',size:11,face:'monospace'}, borderWidth:1.5, physics:false, x:0, y:-260, shadow:{enabled:true,color:'rgba(168,85,247,.1)',size:6,x:0,y:2} },
+};
+
+function buildOntologyGraph(triples) {
+  const nodes=new Map(),edges=[];
+  function node(iri){if(!nodes.has(iri))nodes.set(iri,{id:iri,label:localName(iri),kind:'resource',comment:null});return nodes.get(iri);}
+  for(const{subj,pred,obj}of triples){
+    if(subj.type!=='iri')continue;
+    const s=node(subj.value),p=pred.value;
+    if(obj.type==='literal'){if(p===RDFS+'label')s.label=obj.value;else if(p===RDFS+'comment')s.comment=obj.value;continue;}
+    if(p===RDF_TYPE){if(SCHEMA_TYPES.has(obj.value)){s.kind=localName(obj.value);}continue;}
+    node(obj.value);
+    const sk=(p===RDFS+'domain'||p===RDFS+'range'||p===RDFS+'subClassOf')?'schema':'data';
+    const edir=(p===RDFS+'domain')?{from:obj.value,to:subj.value}:{from:subj.value,to:obj.value};
+    edges.push({...edir,label:localName(p),kind:sk});
+  }
+  return{nodes:[...nodes.values()],edges};
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Ontology graph: render + highlight
+// ═══════════════════════════════════════════════════════════════════
+let ontNetwork=null, ontNodeDS=null, ontEdgeDS=null;
+let origNodeStyles={}, origEdgeStyles={};
+
+async function initOntologyGraph() {
+  const msgEl = document.getElementById('ont-msg');
+  try {
+  const res = await fetch('/api/ontology');
+  const ttl = await res.text();
+  let triples;
+  try { triples = parseTurtle(ttl); }
+  catch(e) { msgEl.textContent = 'Error al parsear ontología: ' + e.message; return; }
+  const graph   = buildOntologyGraph(triples);
+
+  const isSchemaKind = k=>['Class','ObjectProperty','DatatypeProperty','Ontology'].includes(k);
+  const visNodes = graph.nodes.filter(n=>isSchemaKind(n.kind));
+  const visIds   = new Set(visNodes.map(n=>n.id));
+  const visEdges = graph.edges.filter(e=>e.kind==='schema'&&visIds.has(e.from)&&visIds.has(e.to));
+
+  const nodeItems = visNodes.map(n=>{
+    const s=KIND_BASE[n.kind]||{shape:'dot',size:10};
+    const item={id:n.id,label:n.label,title:n.comment||n.label,...s};
+    origNodeStyles[n.id]={color:s.color,borderWidth:s.borderWidth||1.5,shadow:s.shadow};
+    return item;
+  });
+  const edgeItems = visEdges.map((e,i)=>{
+    const item={id:i,from:e.from,to:e.to,label:e.label,
+      dashes:true,arrows:{to:{enabled:true,scaleFactor:.6}},
+      color:{color:'#d4cdc6',highlight:'#9b8b78'},
+      font:{size:9,color:'#a8a29e',background:'rgba(247,245,241,.9)',align:'top',strokeWidth:0},
+      smooth:{type:'curvedCW',roundness:.1},width:1};
+    origEdgeStyles[i]={color:{color:'#d4cdc6',highlight:'#9b8b78'},width:1};
+    return item;
+  });
+
+  ontNodeDS = new vis.DataSet(nodeItems);
+  ontEdgeDS = new vis.DataSet(edgeItems);
+
+  ontNetwork = new vis.Network(
+    document.getElementById('ont-network'),
+    {nodes:ontNodeDS,edges:ontEdgeDS},
+    {
+      physics:{solver:'forceAtlas2Based',forceAtlas2Based:{gravitationalConstant:-60,springLength:140,springConstant:.05,damping:.7,avoidOverlap:.5},stabilization:{iterations:300,fit:true}},
+      layout:{randomSeed:7},
+      interaction:{hover:true,tooltipDelay:200,dragView:true,zoomView:true},
+    }
+  );
+  ontNetwork.once('stabilized', () => { msgEl.style.display = 'none'; });
+  } catch(e) { document.getElementById('ont-msg').textContent = 'Error: ' + e.message; }
+}
+
+function resetHighlight() {
+  if(!ontNodeDS||!ontEdgeDS)return;
+  ontNodeDS.update(ontNodeDS.get().map(n=>({id:n.id,...origNodeStyles[n.id]})));
+  ontEdgeDS.update(ontEdgeDS.get().map(e=>({id:e.id,...origEdgeStyles[e.id]})));
+  document.getElementById('path-badge').style.display='none';
+}
+
+function highlightPath(schemaUsed) {
+  if(!ontNodeDS||!ontEdgeDS||!schemaUsed)return;
+
+  const queryIris=new Set([
+    ...(schemaUsed.iris||[]),
+    ...(schemaUsed.classes||[]),
+    ...(schemaUsed.properties||[]),
+  ]);
+  const direct=new Set();
+  ontNodeDS.get().forEach(n=>{ if(queryIris.has(n.id)) direct.add(n.id); });
+
+  // Propagate along schema edges (3 passes)
+  for(let pass=0;pass<3;pass++){
+    ontEdgeDS.get().forEach(e=>{
+      if(direct.has(e.from)||direct.has(e.to)){direct.add(e.from);direct.add(e.to);}
+    });
+  }
+
+  // Batch update nodes
+  ontNodeDS.update(ontNodeDS.get().map(n=>{
+    if(direct.has(n.id)){
+      const bg=origNodeStyles[n.id]?.color?.background||'#eff6ff';
+      return{id:n.id,borderWidth:2.5,
+        color:{background:'#fef9c3',border:'#ca8a04',highlight:{background:'#fef08a',border:'#a16207'}},
+        shadow:{enabled:true,color:'rgba(202,138,4,.28)',size:14,x:0,y:0}};
+    }
+    return{id:n.id,borderWidth:1,shadow:{enabled:false},
+      color:{background:'#f5f3ef',border:'#e5e0d8',highlight:{background:'#f5f3ef',border:'#e5e0d8'}}};
+  }));
+
+  // Batch update edges
+  ontEdgeDS.update(ontEdgeDS.get().map(e=>{
+    const lit=direct.has(e.from)&&direct.has(e.to);
+    return{id:e.id,
+      color:{color:lit?'#ca8a04':'#ede8e1',highlight:lit?'#a16207':'#ede8e1'},
+      width:lit?2:.5};
+  }));
+
+  if(direct.size>0){
+    try{ontNetwork.fit({nodes:[...direct],animation:{duration:500,easingFunction:'easeInOutQuad'}});}
+    catch(_){}
+  }
+  document.getElementById('path-badge').style.display='';
+}
+
+initOntologyGraph();
+
+// ═══════════════════════════════════════════════════════════════════
+// Chat state
+// ═══════════════════════════════════════════════════════════════════
+let messages=[], thinking=false;
+
+function inferType(id){
+  const s=(id||'').toLowerCase();
+  if(/^:s\d/.test(s))         return 'store';
+  if(s.startsWith(':div'))    return 'division';
+  if(s.startsWith(':zona'))   return 'zone';
+  if(s.startsWith(':item'))   return 'item';
+  if(s.startsWith(':cust'))   return 'customer';
+  if(/^:ord\d/.test(s))       return 'order';
+  if(/^:ol\d/.test(s))        return 'orderline';
+  if(s.startsWith(':promo'))  return 'promo';
+  if(s.startsWith(':pe_')||s.startsWith(':ppe_')) return 'price';
+  if(s.startsWith(':cat'))    return 'category';
+  if(s.startsWith(':grp'))    return 'group';
+  return 'generic';
+}
+
+function renderTraversal(traversal,count){
+  if(!traversal||!traversal.length)return'';
+  const ents=traversal.map(node=>{
+    const type=inferType(node.id);
+    const name=node.label.replace(/\s*\([^)]+\)$/,'').trim();
+    const edgesHtml=(node.edges||[]).map(e=>{
+      const isLit=!e.to_id.startsWith(':')&&!e.to_id.startsWith('http');
+      const ttype=isLit?'':inferType(e.to_id);
+      const tname=e.to.replace(/\s*\([^)]+\)$/,'').trim();
+      const tgt=isLit
+        ?`<span class="gv-literal">"${tname.replace(/</g,'&lt;')}"</span>`
+        :`<span class="gv-target-pill t-${ttype}">${tname.replace(/</g,'&lt;')}</span>`;
+      return`<div class="gv-edge"><span class="gv-prop">${e.prop.replace(/</g,'&lt;')}</span><span class="gv-arrow">→</span>${tgt}</div>`;
+    }).join('');
+    return`<div class="gv-entity"><div class="gv-pill t-${type}">${name.replace(/</g,'&lt;')}<span class="gv-id">${node.id.replace(/</g,'&lt;')}</span></div>${edgesHtml?`<div class="gv-edges">${edgesHtml}</div>`:''}</div>`;
+  }).join('');
+  return`<div class="graph-visual">${ents}</div><div class="gv-count">${count} resultado${count!==1?'s':''}</div>`;
+}
+
+function renderMd(text){
+  const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  // ── Markdown tables ─────────────────────────────────────────────
+  text=text.replace(
+    /^(\|.+\|[ \t]*)\n(\|[\s\-:|]+\|[ \t]*)\n((?:\|.+\|[ \t]*\n?)+)/gm,
+    (_,headerLine,_sep,bodyBlock)=>{
+      const parseRow=l=>l.trim().replace(/^\||\|$/g,'').split('|').map(c=>c.trim());
+      const headers=parseRow(headerLine);
+      const rows=bodyBlock.trim().split('\n').filter(Boolean).map(parseRow);
+      const th=headers.map(h=>`<th>${esc(h)}</th>`).join('');
+      const tb=rows.map(r=>`<tr>${r.map(c=>`<td>${esc(c)}</td>`).join('')}</tr>`).join('');
+      return `<div class="md-table-wrap"><table class="md-table"><thead><tr>${th}</tr></thead><tbody>${tb}</tbody></table></div>`;
+    }
+  );
+
+  return text
+    .replace(/```[\w]*\n?([\s\S]*?)```/g,(_,c)=>`<pre><code>${esc(c.trim())}</code></pre>`)
+    .replace(/`([^`]+)`/g,(_,c)=>`<code>${esc(c)}</code>`)
+    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+    .replace(/^#{1,3} (.+)$/gm,'<strong>$1</strong>')
+    .replace(/((?:^[-*] .+\n?)+)/gm,m=>'<ul>'+m.replace(/^[-*] (.+)$/gm,'<li>$1</li>')+'</ul>')
+    .replace(/((?:^\d+\. .+\n?)+)/gm,m=>'<ol>'+m.replace(/^\d+\. (.+)$/gm,'<li>$1</li>')+'</ol>')
+    .split(/\n{2,}/).map(b=>b.trim()).filter(Boolean)
+    .map(b=>b.startsWith('<')?b:`<p>${b.replace(/\n/g,' ')}</p>`).join('\n');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// DOM
+// ═══════════════════════════════════════════════════════════════════
+const messagesEl=document.getElementById('messages');
+const welcomeEl=document.getElementById('welcome');
+const questionEl=document.getElementById('question');
+const sendBtn=document.getElementById('send-btn');
+
+function appendUserMsg(content){
+  const el=document.createElement('div');el.className='msg';el.dataset.role='user';
+  el.innerHTML=`<div class="avatar user">👤</div><div class="bubble"><div class="role-label">Tú</div><div class="answer-text"><p>${content.replace(/</g,'&lt;')}</p></div></div>`;
+  messagesEl.appendChild(el);el.scrollIntoView({behavior:'smooth',block:'end'});
+}
+
+function appendAsstPlaceholder(){
+  const el=document.createElement('div');el.className='msg';el.dataset.role='assistant';
+  el.innerHTML=`<div class="avatar asst">✦</div><div class="bubble"><div class="role-label">Asistente</div><div id="asst-content"><div class="typing"><span></span><span></span><span></span></div></div></div>`;
+  messagesEl.appendChild(el);el.scrollIntoView({behavior:'smooth',block:'end'});
+  return el;
+}
+
+function fillAsstMsg(msgEl,result){
+  const content=msgEl.querySelector('#asst-content');
+  let schemaUsed=null;
+  const steps=(result.steps||[]);
+  for(const s of steps){
+    if(s.type==='results'&&s.content.schema_used){schemaUsed=s.content.schema_used;break;}
+  }
+  let traversalHtml='';
+  for(const s of steps){
+    if(s.type==='results'){
+      traversalHtml=renderTraversal(s.content.traversal||[],s.content.count||0);
+      break;
+    }
+  }
+  const answerHtml=result.answer?`<div class="answer-text">${renderMd(result.answer)}</div>`:'';
+  content.innerHTML=traversalHtml+answerHtml;
+  content.removeAttribute('id');
+  msgEl.scrollIntoView({behavior:'smooth',block:'end'});
+  if(schemaUsed)highlightPath(schemaUsed);
+}
+
+async function sendMessage(){
+  const question=questionEl.value.trim();
+  if(!question||thinking)return;
+  if(welcomeEl)welcomeEl.style.display='none';
+  resetHighlight();
+  messages.push({role:'user',content:question});
+  appendUserMsg(question);
+  questionEl.value='';questionEl.style.height='auto';
+  thinking=true;sendBtn.disabled=true;setStatus('thinking');
+  const msgEl=appendAsstPlaceholder();
+  try{
+    const res=await fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages})});
+    const result=await res.json();
+    if(!res.ok)throw new Error(result.error||`Error ${res.status}`);
+    messages.push({role:'assistant',content:result.answer||''});
+    fillAsstMsg(msgEl,result);
+  }catch(err){
+    msgEl.querySelector('#asst-content').innerHTML=`<div class="answer-text"><p style="color:var(--red)">⚠ ${err.message}</p></div>`;
+    messages.pop();
+  }finally{thinking=false;sendBtn.disabled=false;setStatus('ready');}
+}
+
+function clearChat(){
+  messages=[];
+  [...messagesEl.children].forEach(el=>{if(el.dataset.role)el.remove();});
+  if(welcomeEl)welcomeEl.style.display='';
+  resetHighlight();
+  questionEl.focus();
+}
+function prefill(btn){questionEl.value=btn.textContent;autoResize();questionEl.focus();}
+function setStatus(s){document.getElementById('sdot').className='sdot'+(s==='thinking'?' thinking':'');document.getElementById('stext').textContent=s==='thinking'?'Pensando…':'Listo';}
+function autoResize(){questionEl.style.height='auto';questionEl.style.height=Math.min(questionEl.scrollHeight,120)+'px';}
+questionEl.addEventListener('input',autoResize);
+questionEl.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();}});
+questionEl.focus();
+</script>
+</body>
 </html>

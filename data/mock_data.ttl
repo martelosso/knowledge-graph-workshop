@@ -1,0 +1,360 @@
+# Mock instance data — Colombian retail context.
+# Stores, products, prices (COP), promotions, customers and orders
+# based on a fictional supermarket chain operating in Colombia.
+
+@prefix :    <https://example.org/smarket/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+# ── Divisiones (regiones de Colombia) ────────────────────────────────────────
+
+:divCundinamarca  a :Division ; rdfs:label "Cundinamarca"@es .
+:divAntioquia     a :Division ; rdfs:label "Antioquia"@es .
+:divValleCauca    a :Division ; rdfs:label "Valle del Cauca"@es .
+:divAtlantico     a :Division ; rdfs:label "Atlántico"@es .
+
+# ── Zonas de precio ───────────────────────────────────────────────────────────
+# Zona A: Bogotá y Medellín (ciudades principales, precios más altos)
+# Zona B: Cali y Barranquilla (ciudades intermedias)
+# Zona C: Ciudades secundarias (precios más bajos)
+
+:zonaA a :PriceZone ; rdfs:label "Zona A"@es .
+:zonaB a :PriceZone ; rdfs:label "Zona B"@es .
+:zonaC a :PriceZone ; rdfs:label "Zona C"@es .
+
+# ── Categorías de tienda ──────────────────────────────────────────────────────
+
+:catPremium  a :StoreCategory ; rdfs:label "Premium"@es .
+:catRegular  a :StoreCategory ; rdfs:label "Regular"@es .
+:catDescuento a :StoreCategory ; rdfs:label "Descuento"@es .
+
+# ── Tiendas ───────────────────────────────────────────────────────────────────
+
+:s001 a :Store ;
+    :storeId "S001" ;
+    rdfs:label "Carulla Usaquén"@es ;
+    :locatedInDivision :divCundinamarca ;
+    :inPriceZone :zonaA ;
+    :hasStoreCategory :catPremium .
+
+:s002 a :Store ;
+    :storeId "S002" ;
+    rdfs:label "Éxito Chapinero"@es ;
+    :locatedInDivision :divCundinamarca ;
+    :inPriceZone :zonaA ;
+    :hasStoreCategory :catRegular .
+
+:s003 a :Store ;
+    :storeId "S003" ;
+    rdfs:label "Jumbo El Poblado"@es ;
+    :locatedInDivision :divAntioquia ;
+    :inPriceZone :zonaA ;
+    :hasStoreCategory :catPremium .
+
+:s004 a :Store ;
+    :storeId "S004" ;
+    rdfs:label "Éxito Laureles"@es ;
+    :locatedInDivision :divAntioquia ;
+    :inPriceZone :zonaA ;
+    :hasStoreCategory :catRegular .
+
+:s005 a :Store ;
+    :storeId "S005" ;
+    rdfs:label "Carulla Granada"@es ;
+    :locatedInDivision :divValleCauca ;
+    :inPriceZone :zonaB ;
+    :hasStoreCategory :catPremium .
+
+:s006 a :Store ;
+    :storeId "S006" ;
+    rdfs:label "Olímpica Barranquilla"@es ;
+    :locatedInDivision :divAtlantico ;
+    :inPriceZone :zonaB ;
+    :hasStoreCategory :catRegular .
+
+:s007 a :Store ;
+    :storeId "S007" ;
+    rdfs:label "D1 Soacha"@es ;
+    :locatedInDivision :divCundinamarca ;
+    :inPriceZone :zonaC ;
+    :hasStoreCategory :catDescuento .
+
+# ── Categorías de productos ───────────────────────────────────────────────────
+
+:catAlimentos  a :Category ; rdfs:label "Alimentos"@es .
+:catBebidas    a :Category ; rdfs:label "Bebidas"@es .
+:catAseo       a :Category ; rdfs:label "Aseo del Hogar"@es .
+
+# ── Grupos de mercancía ───────────────────────────────────────────────────────
+
+:grpLacteos     a :Group ; rdfs:label "Lácteos"@es      ; :belongsToCategory :catAlimentos .
+:grpGranos      a :Group ; rdfs:label "Granos y Arroz"@es ; :belongsToCategory :catAlimentos .
+:grpCarnes      a :Group ; rdfs:label "Carnes"@es       ; :belongsToCategory :catAlimentos .
+:grpFrutasVerd  a :Group ; rdfs:label "Frutas y Verduras"@es ; :belongsToCategory :catAlimentos .
+:grpPanaderia   a :Group ; rdfs:label "Panadería"@es    ; :belongsToCategory :catAlimentos .
+:grpMercado     a :Group ; rdfs:label "Mercado Básico"@es ; :belongsToCategory :catAlimentos .
+:grpBebidas     a :Group ; rdfs:label "Bebidas y Gaseosas"@es ; :belongsToCategory :catBebidas .
+:grpCafe        a :Group ; rdfs:label "Café y Chocolate"@es ; :belongsToCategory :catBebidas .
+:grpAseo        a :Group ; rdfs:label "Productos de Aseo"@es ; :belongsToCategory :catAseo .
+
+# ── Productos ─────────────────────────────────────────────────────────────────
+
+:itemLeche a :Item ;
+    :itemId "I001" ; rdfs:label "Leche Entera Alquería 1L"@es ; :packSize 1 ;
+    :belongsToGroup :grpLacteos .
+
+:itemYogurt a :Item ;
+    :itemId "I002" ; rdfs:label "Yogurt Alpina Durazno 200g"@es ; :packSize 1 ;
+    :belongsToGroup :grpLacteos .
+
+:itemQueso a :Item ;
+    :itemId "I003" ; rdfs:label "Queso Campesino Colanta 500g"@es ; :packSize 1 ;
+    :belongsToGroup :grpLacteos .
+
+:itemArroz a :Item ;
+    :itemId "I004" ; rdfs:label "Arroz Diana x1kg"@es ; :packSize 1 ;
+    :belongsToGroup :grpGranos .
+
+:itemFrijoles a :Item ;
+    :itemId "I005" ; rdfs:label "Frijoles Bola Roja x500g"@es ; :packSize 1 ;
+    :belongsToGroup :grpGranos .
+
+:itemPollo a :Item ;
+    :itemId "I006" ; rdfs:label "Pollo Entero Campollo 1kg"@es ; :packSize 1 ;
+    :belongsToGroup :grpCarnes .
+
+:itemCarne a :Item ;
+    :itemId "I007" ; rdfs:label "Carne Molida Especial 500g"@es ; :packSize 1 ;
+    :belongsToGroup :grpCarnes .
+
+:itemAguacate a :Item ;
+    :itemId "I008" ; rdfs:label "Aguacate Hass x1kg"@es ; :packSize 1 ;
+    :belongsToGroup :grpFrutasVerd .
+
+:itemPlatano a :Item ;
+    :itemId "I009" ; rdfs:label "Plátano Hartón x1kg"@es ; :packSize 1 ;
+    :belongsToGroup :grpFrutasVerd .
+
+:itemArepas a :Item ;
+    :itemId "I010" ; rdfs:label "Arepas Blancas Zenú x6und"@es ; :packSize 6 ;
+    :belongsToGroup :grpPanaderia .
+
+:itemPanela a :Item ;
+    :itemId "I011" ; rdfs:label "Panela Redonda x500g"@es ; :packSize 1 ;
+    :belongsToGroup :grpMercado .
+
+:itemHuevos a :Item ;
+    :itemId "I012" ; rdfs:label "Huevos AA La Granja x30und"@es ; :packSize 30 ;
+    :belongsToGroup :grpMercado .
+
+:itemCafe a :Item ;
+    :itemId "I013" ; rdfs:label "Café Águila Roja x250g"@es ; :packSize 1 ;
+    :belongsToGroup :grpCafe .
+
+:itemChocolate a :Item ;
+    :itemId "I014" ; rdfs:label "Chocolate Corona x250g"@es ; :packSize 1 ;
+    :belongsToGroup :grpCafe .
+
+:itemGaseosa a :Item ;
+    :itemId "I015" ; rdfs:label "Colombiana 1.5L"@es ; :packSize 1 ;
+    :belongsToGroup :grpBebidas .
+
+:itemJabonRopa a :Item ;
+    :itemId "I016" ; rdfs:label "Jabón Ropa Fab x1kg"@es ; :packSize 1 ;
+    :belongsToGroup :grpAseo .
+
+# ── Precios regulares por zona (en COP) ───────────────────────────────────────
+
+:pe_leche_A    a :PriceEntry ; :forItem :itemLeche    ; :forPriceZone :zonaA ; :regularPrice 3500 .
+:pe_leche_B    a :PriceEntry ; :forItem :itemLeche    ; :forPriceZone :zonaB ; :regularPrice 3200 .
+:pe_leche_C    a :PriceEntry ; :forItem :itemLeche    ; :forPriceZone :zonaC ; :regularPrice 2900 .
+
+:pe_yogurt_A   a :PriceEntry ; :forItem :itemYogurt   ; :forPriceZone :zonaA ; :regularPrice 3200 .
+:pe_yogurt_B   a :PriceEntry ; :forItem :itemYogurt   ; :forPriceZone :zonaB ; :regularPrice 2900 .
+
+:pe_queso_A    a :PriceEntry ; :forItem :itemQueso    ; :forPriceZone :zonaA ; :regularPrice 14500 .
+:pe_queso_B    a :PriceEntry ; :forItem :itemQueso    ; :forPriceZone :zonaB ; :regularPrice 13000 .
+
+:pe_arroz_A    a :PriceEntry ; :forItem :itemArroz    ; :forPriceZone :zonaA ; :regularPrice 3800 .
+:pe_arroz_B    a :PriceEntry ; :forItem :itemArroz    ; :forPriceZone :zonaB ; :regularPrice 3500 .
+:pe_arroz_C    a :PriceEntry ; :forItem :itemArroz    ; :forPriceZone :zonaC ; :regularPrice 3200 .
+
+:pe_frijoles_A a :PriceEntry ; :forItem :itemFrijoles ; :forPriceZone :zonaA ; :regularPrice 4200 .
+:pe_frijoles_B a :PriceEntry ; :forItem :itemFrijoles ; :forPriceZone :zonaB ; :regularPrice 3800 .
+:pe_frijoles_C a :PriceEntry ; :forItem :itemFrijoles ; :forPriceZone :zonaC ; :regularPrice 3500 .
+
+:pe_pollo_A    a :PriceEntry ; :forItem :itemPollo    ; :forPriceZone :zonaA ; :regularPrice 12000 .
+:pe_pollo_B    a :PriceEntry ; :forItem :itemPollo    ; :forPriceZone :zonaB ; :regularPrice 10800 .
+:pe_pollo_C    a :PriceEntry ; :forItem :itemPollo    ; :forPriceZone :zonaC ; :regularPrice 9500 .
+
+:pe_carne_A    a :PriceEntry ; :forItem :itemCarne    ; :forPriceZone :zonaA ; :regularPrice 16800 .
+:pe_carne_B    a :PriceEntry ; :forItem :itemCarne    ; :forPriceZone :zonaB ; :regularPrice 15500 .
+
+:pe_aguacate_A a :PriceEntry ; :forItem :itemAguacate ; :forPriceZone :zonaA ; :regularPrice 5500 .
+:pe_aguacate_B a :PriceEntry ; :forItem :itemAguacate ; :forPriceZone :zonaB ; :regularPrice 4800 .
+:pe_aguacate_C a :PriceEntry ; :forItem :itemAguacate ; :forPriceZone :zonaC ; :regularPrice 4200 .
+
+:pe_platano_A  a :PriceEntry ; :forItem :itemPlatano  ; :forPriceZone :zonaA ; :regularPrice 2800 .
+:pe_platano_B  a :PriceEntry ; :forItem :itemPlatano  ; :forPriceZone :zonaB ; :regularPrice 2400 .
+:pe_platano_C  a :PriceEntry ; :forItem :itemPlatano  ; :forPriceZone :zonaC ; :regularPrice 2000 .
+
+:pe_arepas_A   a :PriceEntry ; :forItem :itemArepas   ; :forPriceZone :zonaA ; :regularPrice 4800 .
+:pe_arepas_B   a :PriceEntry ; :forItem :itemArepas   ; :forPriceZone :zonaB ; :regularPrice 4300 .
+:pe_arepas_C   a :PriceEntry ; :forItem :itemArepas   ; :forPriceZone :zonaC ; :regularPrice 3800 .
+
+:pe_panela_A   a :PriceEntry ; :forItem :itemPanela   ; :forPriceZone :zonaA ; :regularPrice 2600 .
+:pe_panela_B   a :PriceEntry ; :forItem :itemPanela   ; :forPriceZone :zonaB ; :regularPrice 2300 .
+:pe_panela_C   a :PriceEntry ; :forItem :itemPanela   ; :forPriceZone :zonaC ; :regularPrice 2000 .
+
+:pe_huevos_A   a :PriceEntry ; :forItem :itemHuevos   ; :forPriceZone :zonaA ; :regularPrice 18500 .
+:pe_huevos_B   a :PriceEntry ; :forItem :itemHuevos   ; :forPriceZone :zonaB ; :regularPrice 17000 .
+:pe_huevos_C   a :PriceEntry ; :forItem :itemHuevos   ; :forPriceZone :zonaC ; :regularPrice 15500 .
+
+:pe_cafe_A     a :PriceEntry ; :forItem :itemCafe     ; :forPriceZone :zonaA ; :regularPrice 8500 .
+:pe_cafe_B     a :PriceEntry ; :forItem :itemCafe     ; :forPriceZone :zonaB ; :regularPrice 7800 .
+:pe_cafe_C     a :PriceEntry ; :forItem :itemCafe     ; :forPriceZone :zonaC ; :regularPrice 7200 .
+
+:pe_choco_A    a :PriceEntry ; :forItem :itemChocolate ; :forPriceZone :zonaA ; :regularPrice 7800 .
+:pe_choco_B    a :PriceEntry ; :forItem :itemChocolate ; :forPriceZone :zonaB ; :regularPrice 7200 .
+
+:pe_gaseosa_A  a :PriceEntry ; :forItem :itemGaseosa  ; :forPriceZone :zonaA ; :regularPrice 5200 .
+:pe_gaseosa_B  a :PriceEntry ; :forItem :itemGaseosa  ; :forPriceZone :zonaB ; :regularPrice 4700 .
+:pe_gaseosa_C  a :PriceEntry ; :forItem :itemGaseosa  ; :forPriceZone :zonaC ; :regularPrice 4300 .
+
+:pe_jabon_A    a :PriceEntry ; :forItem :itemJabonRopa ; :forPriceZone :zonaA ; :regularPrice 9200 .
+:pe_jabon_B    a :PriceEntry ; :forItem :itemJabonRopa ; :forPriceZone :zonaB ; :regularPrice 8500 .
+
+# ── Promociones ───────────────────────────────────────────────────────────────
+
+:promo2x1Leche a :BogoPromo ;
+    :promoId "P001" ;
+    rdfs:label "2x1 Leche Entera Alquería"@es .
+
+:promoCafeOff a :PercentOffPromo ;
+    :promoId "P002" ;
+    rdfs:label "20% de descuento Café Águila Roja"@es ;
+    :discountPercent 20 .
+
+:promoPolloMitad a :BuyOneGetHalfOffPromo ;
+    :promoId "P003" ;
+    rdfs:label "Lleva 2 Pollos: el segundo a mitad de precio"@es .
+
+:promoGaseosaOff a :PercentOffPromo ;
+    :promoId "P004" ;
+    rdfs:label "15% de descuento Colombiana 1.5L"@es ;
+    :discountPercent 15 .
+
+# ── Precios promocionales (en COP) ───────────────────────────────────────────
+
+:ppe_leche_A    a :PromoPriceEntry ;
+    :forItem :itemLeche ; :forPriceZone :zonaA ; :forPromo :promo2x1Leche ; :promoPrice 3500 .
+
+:ppe_leche_B    a :PromoPriceEntry ;
+    :forItem :itemLeche ; :forPriceZone :zonaB ; :forPromo :promo2x1Leche ; :promoPrice 3200 .
+
+:ppe_cafe_A     a :PromoPriceEntry ;
+    :forItem :itemCafe ; :forPriceZone :zonaA ; :forPromo :promoCafeOff ; :promoPrice 6800 .
+
+:ppe_cafe_B     a :PromoPriceEntry ;
+    :forItem :itemCafe ; :forPriceZone :zonaB ; :forPromo :promoCafeOff ; :promoPrice 6240 .
+
+:ppe_pollo_A    a :PromoPriceEntry ;
+    :forItem :itemPollo ; :forPriceZone :zonaA ; :forPromo :promoPolloMitad ; :promoPrice 12000 .
+
+:ppe_gaseosa_A  a :PromoPriceEntry ;
+    :forItem :itemGaseosa ; :forPriceZone :zonaA ; :forPromo :promoGaseosaOff ; :promoPrice 4420 .
+
+:ppe_gaseosa_B  a :PromoPriceEntry ;
+    :forItem :itemGaseosa ; :forPriceZone :zonaB ; :forPromo :promoGaseosaOff ; :promoPrice 3995 .
+
+# ── Clientes ──────────────────────────────────────────────────────────────────
+
+:cust001 a :Customer ; :customerId "C001" ; rdfs:label "Valentina"@es .
+:cust002 a :Customer ; :customerId "C002" ; rdfs:label "Sebastián"@es .
+:cust003 a :Customer ; :customerId "C003" ; rdfs:label "Camila"@es .
+:cust004 a :Customer ; :customerId "C004" ; rdfs:label "Andrés"@es .
+:cust005 a :Customer ; :customerId "C005" ; rdfs:label "Daniela"@es .
+
+# ── Pedidos y líneas de pedido ────────────────────────────────────────────────
+
+# Valentina en Carulla Usaquén — mercado semanal con 2x1 leche
+:ord001 a :Order ;
+    :orderId "ORD001" ; :orderDate "2024-10-01"^^xsd:date ;
+    :placedBy :cust001 ; :placedAt :s001 ;
+    :hasOrderLine :ol001a, :ol001b, :ol001c, :ol001d .
+
+:ol001a a :OrderLine ; :forItem :itemLeche     ; :quantity 2 ; :forPromo :promo2x1Leche .
+:ol001b a :OrderLine ; :forItem :itemArepas    ; :quantity 1 .
+:ol001c a :OrderLine ; :forItem :itemAguacate  ; :quantity 1 .
+:ol001d a :OrderLine ; :forItem :itemCafe      ; :quantity 1 ; :forPromo :promoCafeOff .
+
+# Sebastián en Éxito Laureles (Medellín) — proteína + granos
+:ord002 a :Order ;
+    :orderId "ORD002" ; 
+    :orderDate "2024-10-01"^^xsd:date ;
+    :placedBy :cust002 ; :placedAt :s004 ;
+    :hasOrderLine :ol002a, :ol002b, :ol002c .
+
+:ol002a a :OrderLine ; :forItem :itemPollo     ; :quantity 2 ; :forPromo :promoPolloMitad .
+:ol002b a :OrderLine ; :forItem :itemArroz     ; :quantity 2 .
+:ol002c a :OrderLine ; :forItem :itemFrijoles  ; :quantity 1 .
+
+# Valentina de nuevo — artículos de aseo + desayuno
+:ord003 a :Order ;
+    :orderId "ORD003" ; :orderDate "2024-10-02"^^xsd:date ;
+    :placedBy :cust001 ; :placedAt :s001 ;
+    :hasOrderLine :ol003a, :ol003b, :ol003c .
+
+:ol003a a :OrderLine ; :forItem :itemHuevos    ; :quantity 1 .
+:ol003b a :OrderLine ; :forItem :itemChocolate ; :quantity 1 .
+:ol003c a :OrderLine ; :forItem :itemJabonRopa ; :quantity 1 .
+
+# Camila en Jumbo El Poblado — mercado completo
+:ord004 a :Order ;
+    :orderId "ORD004" ; :orderDate "2024-10-02"^^xsd:date ;
+    :placedBy :cust003 ; :placedAt :s003 ;
+    :hasOrderLine :ol004a, :ol004b, :ol004c, :ol004d .
+
+:ol004a a :OrderLine ; :forItem :itemLeche     ; :quantity 1 .
+:ol004b a :OrderLine ; :forItem :itemQueso     ; :quantity 1 .
+:ol004c a :OrderLine ; :forItem :itemPlatano   ; :quantity 2 .
+:ol004d a :OrderLine ; :forItem :itemPanela    ; :quantity 1 .
+
+# Andrés en Carulla Granada (Cali) — bebidas y snacks
+:ord005 a :Order ;
+    :orderId "ORD005" ; :orderDate "2024-10-03"^^xsd:date ;
+    :placedBy :cust004 ; :placedAt :s005 ;
+    :hasOrderLine :ol005a, :ol005b .
+
+:ol005a a :OrderLine ; :forItem :itemGaseosa   ; :quantity 3 ; :forPromo :promoGaseosaOff .
+:ol005b a :OrderLine ; :forItem :itemCafe      ; :quantity 2 ; :forPromo :promoCafeOff .
+
+# Daniela en Olímpica Barranquilla
+:ord006 a :Order ;
+    :orderId "ORD006" ; :orderDate "2024-10-03"^^xsd:date ;
+    :placedBy :cust005 ; :placedAt :s006 ;
+    :hasOrderLine :ol006a, :ol006b, :ol006c .
+
+:ol006a a :OrderLine ; :forItem :itemArroz     ; :quantity 3 .
+:ol006b a :OrderLine ; :forItem :itemPollo     ; :quantity 1 .
+:ol006c a :OrderLine ; :forItem :itemAguacate  ; :quantity 2 .
+
+# Sebastián en D1 Soacha — compra económica
+:ord007 a :Order ;
+    :orderId "ORD007" ; :orderDate "2024-10-04"^^xsd:date ;
+    :placedBy :cust002 ; :placedAt :s007 ;
+    :hasOrderLine :ol007a, :ol007b, :ol007c .
+
+:ol007a a :OrderLine ; :forItem :itemArroz     ; :quantity 2 .
+:ol007b a :OrderLine ; :forItem :itemFrijoles  ; :quantity 2 .
+:ol007c a :OrderLine ; :forItem :itemLeche     ; :quantity 1 .
+
+# Camila en Éxito Chapinero — lácteos y desayuno
+:ord008 a :Order ;
+    :orderId "ORD008" ; :orderDate "2024-10-04"^^xsd:date ;
+    :placedBy :cust003 ; :placedAt :s002 ;
+    :hasOrderLine :ol008a, :ol008b, :ol008c .
+
+:ol008a a :OrderLine ; :forItem :itemYogurt    ; :quantity 3 .
+:ol008b a :OrderLine ; :forItem :itemLeche     ; :quantity 2 ; :forPromo :promo2x1Leche .
+:ol008c a :OrderLine ; :forItem :itemArepas    ; :quantity 2 .
