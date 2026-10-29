@@ -630,7 +630,6 @@ let parsedText = null;
 let textMarks  = [];
 let rafSel     = 0;
 
-const HI_EDGE = { color:'#1c1917', highlight:'#1c1917', hover:'#1c1917', opacity:1 };
 const edgeColor = (kind, opacity = 1) => ({ ...EDGE_COLOR[kind], opacity });
 
 function setGraphHighlight(nodeIds, edgeIds) {   // nodeIds === null clears
@@ -642,7 +641,9 @@ function setGraphHighlight(nodeIds, edgeIds) {   // nodeIds === null clears
   }));
   edgesDS.update(edgesDS.getIds().map(id => {
     const hit = on && edgeIds.has(id), kind = edgeById.get(id).kind;
-    return { id, width: hit ? 2.5 : 1, color: hit ? HI_EDGE : edgeColor(kind, on ? .2 : 1) };
+    // Same colour/width as vis's own click-selection (EDGE_COLOR.highlight, selectionWidth).
+    return { id, width: hit ? 2 : 1, color: hit ? { ...EDGE_COLOR[kind], color: EDGE_COLOR[kind].highlight, opacity: 1 }
+                                                : edgeColor(kind, on ? .2 : 1) };
   }));
 }
 
